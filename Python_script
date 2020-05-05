@@ -26,9 +26,11 @@
 # user the option of leaving pi_hat blank, by doing so, the function will call the HA function to get the value of
 # pi_hat but in that case, the user needs to provide an additional input K to run the HA function.
 # If the user will provide both pi_hat and pi_star, the input should be in the same format as following:
+
 # pi       ref_eur_1000G  obs_afr_gnmoad
 # pi_star  0              1
 # pi_hat   0.15           0.85
+
 # In this example, we only have one reference ancestry, which is ref_eur_1000G and we have one observed ancestry,
 # which is obs_afr_gnomad.
 # * One essential thing for the column name of the ancestry: the column names of the reference ancestries and
