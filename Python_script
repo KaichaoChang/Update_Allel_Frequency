@@ -191,6 +191,3 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
     print(time)
 
     return updateAF
-
-answer = updateHA(D_file="D:/research/HA-package-data.csv", D_file_format='csv', ancestry_file= "D:/research/ancestry.csv", ancestry_file_format='csv', k =5)
-print(answer)
