@@ -1,0 +1,272 @@
+# the update allele frequencies function
+
+# the function should contain three inputs: a string D_file, a string D_file_format, the string ancestry_file, a
+# string ancestry_file_format, an integer K and an integer obs;
+# the function will provide us an array: updateAF
+
+# D_file: the file location of the Dataframe D, which should be in the same format as following;
+#   CHR  RSID       bP       A1 A2  ref_eur_1000G ...  ref_iam_1000G   obs_afr    obs_amr_gnomad    obs_oth_gnomad
+#   1    rs2887286  1156131  C  T   0.173275495   ...  0.7093          0.4886100  0.52594300        0.22970500
+#   1    rs41477744 2329564  A  G   0.001237745   ...  0.0000          0.0459137  0.00117925        0.00827206
+#   1    rs9661525  2952840  G  T   0.168316089   ...  0.2442          0.1359770  0.28605200        0.15561700
+#   1    rs2817174  3044181  C  T   0.428212624   ...  0.5000          0.8548790  0.48818000        0.47042500
+#   1    rs12139206 3504073  T  C   0.204214851   ...  0.3372          0.7241780  0.29550800        0.25874800
+#   1    rs7514979  3654595  T  C   0.004950604   ...  0.0000          0.3362490  0.01650940        0.02481620
+# ...
+# The dataframe D should contain the CHR, RSID, bP, A1, A2, the reference ancestries and observation ancestries, and
+# the order of those columns should also be the same as the example one
+
+# D_file_format: this function can deal with two different data input format, if the data format is tab-delimited text
+# the we need to make the file_format as 'tab' to get the dataframe D from a file of such format, which is the common
+# used data format when dealing with allel frequencies; if the user only gets the csv data, then the user should input
+# file_format as csv. The default is 'tab'.
+
+# ancestry_file: the file location of Dataframe ancestry. For this input, user needs to provide the pi_hat and pi_star
+# value for the reference ancestries and observed ancestries they want to estimate. But the function will also provide
+# user the option of leaving pi_hat blank, by doing so, the function will call the HA function to get the value of
+# pi_hat but in that case, the user needs to provide an additional input K to run the HA function.
+# If the user will provide both pi_hat and pi_star, the input should be in the same format as following:
+# pi       ref_eur_1000G  obs_afr_gnmoad
+# pi_star  0              1
+# pi_hat   0.15           0.85
+# In this example, we only have one reference ancestry, which is ref_eur_1000G and we have one observed ancestry,
+# which is obs_afr_gnomad.
+# * One essential thing for the column name of the ancestry: the column names of the reference ancestries and
+# observed ancestry should be exactly the same as the one in the dataframe D.
+
+# ancestry_file_format: the data format of the input file of dataframe ancestry(the function of this input is exactly
+# the same as the D_file_format. The default is also "tab".
+
+# Integer K; the number of reference ancestries the user inputs
+# in the example case, we input 5 reference ancestries: ref_eur_1000G, ref_afr_1000G, ref_sas_1000G, ref_eas_1000G,
+# ref_iam_1000G, which stand for European, African, South Asian, East Asian, Indigenous American ancestries,
+# respectively.
+# The default is none. The user needs to input K only if the user wants to use the Hidden Ancestries Function to get
+# the pi_hat,
+
+# Integer obs: when using Hidden Ancestries Function to get pi_hat, the user also needs to input obs to locate the
+# observe ancestries we want to work on. It selects the ancestry which is k column(s) after the last reference
+# ancestry.
+# In the example case, when inputing obs = 1, we work on obs_amr_gnomad and when inputing obs = 2, we will work on
+# obs_oth_gnomad.
+
+# Then we get one output updateAF, which is the updated hidden proportions of every reference ancestry we select.
+
+# Example:
+# The case that the user inputs both pi_star and pi_hat.
+# output = updateHA("D_file_location","D_file_format","ancestry_file_location","ancestry_file_format")
+# When the user needs to use the Hidden Ancestries Function to help the user calculate pi_hat, then use command
+# output = updateHA("D_file_location","D_file_format","ancestry_file_location","ancestry_file_format", k, obs)
+
+import numpy as np
+import pandas as pd
+
+def HA(k=None, x_guess=None, obs=1, file=None, file_format='tab'):
+    # Start the clock!
+    start = timeit.default_timer()
+
+    if file is None:
+        print('Please specify a genetic data frame.')
+        return
+
+    # Use the data_processor to take the info we need out of the data frame D
+    data_array = data_processor(file, file_format, k, obs)
+    A = data_array[0]
+    taf = data_array[1]
+
+    if abs(np.shape(np.shape(A))[0] - 2) > 0:
+        print('Please ensure that data matrix D is size Nxk.')
+        return
+
+    if k is None:
+        print('Please specify k, the number of reference ancestries.')
+        return
+
+    if isinstance(k, int) == False:
+        print('Please ensure that k is an integer.')
+        return
+
+    elif k <= 0:
+        print('Please ensure that k is a positive integer.')
+        return
+
+    if x_guess is None:
+        x_guess = np.transpose(1 / k * np.ones((k, 1)))
+
+    if abs(np.shape(x_guess)[0] - 1) > 0 and abs(np.shape(x_guess)[1] - 1) > 0:
+        print('Please ensure that initial iterate x_guess is a vector, size kx1 or 1xk.')
+        return
+
+    if abs(np.shape(x_guess)[1] - k) > 0:
+        x_guess = np.transpose(np.copy(x_guess))
+
+    if abs(np.shape(x_guess)[1] - k) > 0:
+        print('Please ensure that initial iterate x_guess is a vector, size kx1 or 1xk.')
+
+    if isinstance(obs, int) == False:
+        print('Please ensure that obs is an integer.')
+        return
+
+    elif obs <= 0:
+        print('Please ensure that obs is a positive integer.')
+        return
+
+    # This is the objective function!
+    def obj_fun(x):
+
+        # Start the value of the objective function at 0
+        b = 0
+
+        # This adds up each k column of A scaled by the k-th ancestry
+        for i in range(0, k):
+            b = b + x[i] * A[:, i:(i + 1)]
+        # After the for loop, b is an Nx1 vector which contains the value of the mixture model for all N SNP's
+
+        # Now we subtract off the total allele frequency at each SNP
+        b = b - taf
+
+        # Finally we square every entry of the Nx1 vector b, and add them all up.
+        # This is the value of the objective function, which we now return
+        return np.sum(b ** 2, axis=0)[0]
+
+    # This is the gradient of the objective function!
+    def grad_obj_fun(x):
+
+        # Initiate empty kx1 vector
+        gradvec = np.zeros((k, 1))
+
+        # Start the value of the gradient entries with 0
+        d = 0
+
+        # We still need the value of the "inside" of the objective function, so we repeat part of what we did above:
+        for i in range(0, k):
+            d = d + x[i] * A[:, i:(i + 1)]
+        d = d - taf
+        # Now d is Nx1 and contains the value of the mixture model minus the total allele frequencies at each SNP
+
+        # Now we form the k entries of the gradient and return that vector
+        for i in range(0, k):
+            gradvec[i, :] = np.sum(2 * A[:, i:(i + 1)] * d, axis=0)
+        return gradvec
+
+    # These are wrappers that make our constraints (all proportions must add to 1) and our bounds (all proportions are 0 or greater)
+    cons = ({'type': 'eq', 'fun': lambda x: np.sum(x, axis=0) - 1},)
+
+    bnds = ((0, None),)
+
+    for i in range(0, k - 1):
+        bnds = bnds + ((0, None),)
+
+    # We now form an answer object which will store all of the outputs to running SLSQP given our inputs above
+    ans_obj = scipy.optimize.minimize(obj_fun, x_guess, method='SLSQP', jac=grad_obj_fun, bounds=bnds, constraints=cons,
+                                      tol=1e-5)
+
+    # Stop the clock!
+    stop = timeit.default_timer()
+
+    # Difference stop-start tells us run time
+    time = stop - start
+
+    # Print results for the user!
+    print('Numerical solution via SLSQP, pi_final = ', ans_obj.x)
+    print()
+    print('Number of SLSQP iterations:', ans_obj.nit)
+    print()
+    print('Runtime:', time, 'seconds')
+
+    # Return the 3 outputs we wanted, namely: the solution vector, number of iterations, and run time
+    return ans_obj.x, ans_obj.nit, time
+
+
+def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file_format='tab', k=None, obs=1,x_guess=None):
+
+    # Reads dataframe D with certain data format
+    if D_file_format=='csv':
+        D = pd.read_csv(D_file)
+    else:
+        D = pd.read_csv(D_file, sep='\t')
+
+    # Reads dataframe ancestry with certain data format
+    if ancestry_file_format=='csv':
+        ancestry = pd.read_csv(ancestry_file)
+    else:
+        ancestry = pd.read_csv(ancestry_file, sep='\t')
+
+    # check the data format of dataframe D
+    if abs(np.shape(np.shape(D))[0]-2)>0:
+        print('Please ensure that data matrix D is size Nxk.')
+        return
+
+    # check the data format of dataframe ancestry
+    if abs(np.shape(np.shape(ancestry))[0]-2)>0:
+        print('Please ensure that data matrix ancestry is size Nxk.')
+        return
+
+    # check whether the column names in ancestry are in D
+    for i in range(1, len(ancestry.columns)):
+        if ancestry.columns[i] not in D.columns.values:
+            print('Please ensure that the column names are same in D and ancestry')
+            print('The first one with different column name is', end=' ')
+            print(ancestry.columns[i], end=' ')
+            print('in ancestry')
+            return
+
+    # create the HA_check to find out whether there is a missing values in pi_hats and then we could use the Hidden
+    # Ancestries Function to get those values
+    HA_check = ancestry.isna()
+
+    for i in range(1, len(ancestry.columns)):
+        if HA_check.values[1, i]:
+            answer_obj = HA(file=D_file, file_format=D_file_format, k=k, obs=obs, x_guess = x_guess)
+            pi_final = answer_obj
+            print(pi_final)
+            # finish this part by inputting pi_hats from the result of HA function !!!!!!
+
+    # use HA_check to keep the columns names for that when using numpy to do computation will lose those column names
+    HA_check = HA_check.drop(columns='pi')
+
+    # deleting the useless columns on ancestry
+    ancestry = ancestry.drop(columns='pi')
+
+
+    # grab the column names of references ancestries
+    ref_ancestries = ancestry.columns.values[0:len(ancestry.columns)-1]
+
+    # grab the column name of single observation ancestry
+    obs_ancestry = ancestry.columns.values[len(ancestry.columns)-1]
+
+    # transform ancestry from pandas dataframe into np array in order to compute
+    ancestry = np.array(ancestry)
+
+    # make sure the sum of pi_hats and the sum of pi_stars are 1
+    ancestry[0] = ancestry[0]/sum(ancestry[0])
+    ancestry[1] = ancestry[1]/sum(ancestry[1])
+
+    # create hatted which uses for summing up reference ancestries multiplied by pi_star and initialize it with the
+    # result of the first reference ancestry
+    hatted = D[ref_ancestries[0]] * ancestry[1,0]
+
+    # create hatted which uses for summing up reference ancestries multiplied by pi_hat and initialize it with the
+    # result of the first reference ancestry
+    starred = D[ref_ancestries[0]] * ancestry[0,0]
+
+    # add the missing column names on the ancestry
+    ancestry = pd.DataFrame(ancestry, columns = HA_check.columns.values)
+
+    # for those cases with more than one reference ancestries, sum the starred and hatted for other reference ancestries
+    if len(ref_ancestries) > 1:
+        for i in range(1, len(ref_ancestries)):
+            hatted = hatted + D[ref_ancestries[i]] * ancestry.loc[1,ref_ancestries[i]]
+            starred = starred + D[ref_ancestries[i]] * ancestry.loc[0,ref_ancestries[i]]
+
+    updateAF = np.zeros((len(D),1))
+    # get the updated allele frequency
+    for i in range(len(D)):
+        updateAF[i] = ((ancestry.loc[0, obs_ancestry]/ancestry.loc[1, obs_ancestry]) * (D[obs_ancestry] - hatted)[[i]]
+                    + starred[[i]])
+
+    # merge the updateAF into the original data
+    updateAF = pd.DataFrame(data=updateAF,columns=['updateAF'])
+    updateAF = pd.concat([D, updateAF], axis = 1)
+
+    return updateAF
