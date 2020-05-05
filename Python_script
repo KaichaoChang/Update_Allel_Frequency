@@ -58,8 +58,52 @@
 # When the user needs to use the Hidden Ancestries Function to help the user calculate pi_hat, then use command
 # output = updateHA("D_file_location","D_file_format","ancestry_file_location","ancestry_file_format", k, obs)
 
+# The output of Example;
+#     CHR        RSID        bP  ... obs_amr_gnomad obs_oth_gnomad  updateAF
+#       1   rs2887286   1156131  ...       0.525943       0.229705  0.539310
+#       1  rs41477744   2329564  ...       0.001179       0.008272  0.051583
+#       1   rs9661525   2952840  ...       0.286052       0.155617  0.133343
+#       1   rs2817174   3044181  ...       0.488180       0.470425  0.910666
+#       1  rs12139206   3504073  ...       0.295508       0.258748  0.793055
+#       1   rs7514979   3654595  ...       0.016509       0.024816  0.378376
+# ...
+
 import numpy as np
 import pandas as pd
+import timeit
+import scipy as scipy
+from scipy.optimize import minimize
+
+np.set_printoptions(threshold=np.inf)
+
+def data_processor(file, file_format, k, obs):
+    # Reads data file in using pandas
+    if (file_format == 'csv') == True:
+        D = pd.read_csv(file)
+    else:
+        D = pd.read_csv(file, sep='\t')
+
+    # Extract key variables
+    N = np.shape(D)[0]  # N=number of SNPs!
+    A = np.zeros((N, k))
+    taf = np.zeros((N, 1))
+    names = D.columns  # collect list of column names
+
+    # Here we make sure that naming conventions are correct in given data and matches the number of reference ancestries, k
+    for i in range(0, k):
+        if ('ref' in names[i + 5]) == False:
+            print(
+                'Please ensure that all K reference populations are labeled with ref. See data formatting standards for more details.')
+            return
+
+    # Assume that D has 5 columns we do not need for calculations (columns 0, 1, 2, 3 and 4 in python)...
+    # Then we can grab out the reference ancestries
+    for i in range(5, 5 + k):
+        A[:, i - 5] = D[names[i]]
+
+    taf[:, 0] = D[names[k + 4 + obs]]  # + 1 because python starts indexing at 0.
+
+    return A, taf
 
 def HA(k=None, x_guess=None, obs=1, file=None, file_format='tab'):
     # Start the clock!
@@ -179,6 +223,16 @@ def HA(k=None, x_guess=None, obs=1, file=None, file_format='tab'):
 
 
 def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file_format='tab', k=None, obs=1,x_guess=None):
+    # Start the clock
+    start = timeit.default_timer()
+
+    # Check the input formt of D_file_format
+    if D_file_format not in ['tab','csv']:
+        print('Please ensure the data format of D is either tab-delimited txt or csv')
+
+    # Check the input formt of ancestry_file_format
+    if ancestry_file_format not in ['tab','csv']:
+        print('Please ensure the data format of ancestry is either tab-delimited txt or csv')
 
     # Reads dataframe D with certain data format
     if D_file_format=='csv':
@@ -192,17 +246,25 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
     else:
         ancestry = pd.read_csv(ancestry_file, sep='\t')
 
-    # check the data format of dataframe D
+    # Check the data format of dataframe D
     if abs(np.shape(np.shape(D))[0]-2)>0:
         print('Please ensure that data matrix D is size Nxk.')
         return
 
-    # check the data format of dataframe ancestry
+    # Check the format of obs
+    if isinstance(obs,int)==False:
+        print('Please ensure that obs is an integer.')
+        return
+    elif obs <=0:
+        print('Please ensure that obs is a positive integer.')
+        return
+
+    # Check the data format of dataframe ancestry
     if abs(np.shape(np.shape(ancestry))[0]-2)>0:
         print('Please ensure that data matrix ancestry is size Nxk.')
         return
 
-    # check whether the column names in ancestry are in D
+    # Check whether the column names in ancestry are in D
     for i in range(1, len(ancestry.columns)):
         if ancestry.columns[i] not in D.columns.values:
             print('Please ensure that the column names are same in D and ancestry')
@@ -211,7 +273,7 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
             print('in ancestry')
             return
 
-    # create the HA_check to find out whether there is a missing values in pi_hats and then we could use the Hidden
+    # Create the HA_check to find out whether there is a missing values in pi_hats and then we could use the Hidden
     # Ancestries Function to get those values
     HA_check = ancestry.isna()
 
@@ -222,27 +284,27 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
             print(pi_final)
             # finish this part by inputting pi_hats from the result of HA function !!!!!!
 
-    # use HA_check to keep the columns names for that when using numpy to do computation will lose those column names
+    # Use HA_check to keep the columns names for that when using numpy to do computation will lose those column names
     HA_check = HA_check.drop(columns='pi')
 
-    # deleting the useless columns on ancestry
+    # Delete the useless columns on ancestry
     ancestry = ancestry.drop(columns='pi')
 
 
-    # grab the column names of references ancestries
+    # Grab the column names of references ancestries
     ref_ancestries = ancestry.columns.values[0:len(ancestry.columns)-1]
 
-    # grab the column name of single observation ancestry
+    # Grab the column name of single observation ancestry
     obs_ancestry = ancestry.columns.values[len(ancestry.columns)-1]
 
-    # transform ancestry from pandas dataframe into np array in order to compute
+    # Transform ancestry from pandas dataframe into np array in order to compute
     ancestry = np.array(ancestry)
 
-    # make sure the sum of pi_hats and the sum of pi_stars are 1
+    # Make sure the sum of pi_hats and the sum of pi_stars are 1
     ancestry[0] = ancestry[0]/sum(ancestry[0])
     ancestry[1] = ancestry[1]/sum(ancestry[1])
 
-    # create hatted which uses for summing up reference ancestries multiplied by pi_star and initialize it with the
+    # Create hatted which uses for summing up reference ancestries multiplied by pi_star and initialize it with the
     # result of the first reference ancestry
     hatted = D[ref_ancestries[0]] * ancestry[1,0]
 
@@ -250,23 +312,32 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
     # result of the first reference ancestry
     starred = D[ref_ancestries[0]] * ancestry[0,0]
 
-    # add the missing column names on the ancestry
+    # Add the missing column names on the ancestry
     ancestry = pd.DataFrame(ancestry, columns = HA_check.columns.values)
 
-    # for those cases with more than one reference ancestries, sum the starred and hatted for other reference ancestries
+    # For those cases with more than one reference ancestries, sum the starred and hatted for other reference ancestries
     if len(ref_ancestries) > 1:
         for i in range(1, len(ref_ancestries)):
             hatted = hatted + D[ref_ancestries[i]] * ancestry.loc[1,ref_ancestries[i]]
             starred = starred + D[ref_ancestries[i]] * ancestry.loc[0,ref_ancestries[i]]
 
     updateAF = np.zeros((len(D),1))
-    # get the updated allele frequency
+    # Get the updated allele frequency
     for i in range(len(D)):
         updateAF[i] = ((ancestry.loc[0, obs_ancestry]/ancestry.loc[1, obs_ancestry]) * (D[obs_ancestry] - hatted)[[i]]
                     + starred[[i]])
 
-    # merge the updateAF into the original data
+    # Merge the updateAF into the original data
     updateAF = pd.DataFrame(data=updateAF,columns=['updateAF'])
     updateAF = pd.concat([D, updateAF], axis = 1)
+
+    # Stop the clock
+    stop = timeit.default_timer()
+
+    # Difference stop-start tells us run time
+    time = stop - start
+
+    print("The running time is", end=' ')
+    print(time)
 
     return updateAF
