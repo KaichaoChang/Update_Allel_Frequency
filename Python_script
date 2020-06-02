@@ -1,20 +1,23 @@
-# the update allele frequencies function
+# The Update Allele Frequencies Function
 
-# the function should contain three inputs: a string D_file, a string D_file_format, the string ancestry_file, a
-# string ancestry_file_format, an integer K and an integer obs;
-# the function will provide us an array: updateAF
+# The function should contain three inputs: a string D_file, a string D_file_format, the string ancestry_file, a
+# string ancestry_file_format;
+# The function will provide us an array: updateAF, the last column is the updateAF we got based on our SNPs, pi_hat
+# and pi_star. Besides, the function also provide the overall runtime of the program.
 
 # D_file: the file location of the Dataframe D, which should be in the same format as following;
-#   CHR  RSID       bP       A1 A2  ref_eur_1000G ...  ref_iam_1000G   obs_afr    obs_amr_gnomad    obs_oth_gnomad
-#   1    rs2887286  1156131  C  T   0.173275495   ...  0.7093          0.4886100  0.52594300        0.22970500
-#   1    rs41477744 2329564  A  G   0.001237745   ...  0.0000          0.0459137  0.00117925        0.00827206
-#   1    rs9661525  2952840  G  T   0.168316089   ...  0.2442          0.1359770  0.28605200        0.15561700
-#   1    rs2817174  3044181  C  T   0.428212624   ...  0.5000          0.8548790  0.48818000        0.47042500
-#   1    rs12139206 3504073  T  C   0.204214851   ...  0.3372          0.7241780  0.29550800        0.25874800
-#   1    rs7514979  3654595  T  C   0.004950604   ...  0.0000          0.3362490  0.01650940        0.02481620
+#   CHR  RSID       BP       A1 A2  ref_eur_1000G ...  ref_iam_1000G   gnomAD_afr    gnomAD_amr    gnomAD_oth
+#   1    rs2887286  1156131  C  T   0.173275495   ...  0.7093          0.4886100     0.52594300    0.22970500
+#   1    rs41477744 2329564  A  G   0.001237745   ...  0.0000          0.0459137     0.00117925    0.00827206
+#   1    rs9661525  2952840  G  T   0.168316089   ...  0.2442          0.1359770     0.28605200    0.15561700
+#   1    rs2817174  3044181  C  T   0.428212624   ...  0.5000          0.8548790     0.48818000    0.47042500
+#   1    rs12139206 3504073  T  C   0.204214851   ...  0.3372          0.7241780     0.29550800    0.25874800
+#   1    rs7514979  3654595  T  C   0.004950604   ...  0.0000          0.3362490     0.01650940    0.02481620
 # ...
 # The dataframe D should contain the CHR, RSID, bP, A1, A2, the reference ancestries and observation ancestries, and
 # the order of those columns should also be the same as the example one
+# reference ancestries: ref_xxx_1000G (xxx represents the name abbreviation of the ancestries
+# observation ancestries: gnomAD_xxx
 
 # D_file_format: this function can deal with two different data input format, if the data format is tab-delimited text
 # the we need to make the file_format as 'tab' to get the dataframe D from a file of such format, which is the common
@@ -22,69 +25,66 @@
 # file_format as csv. The default is 'tab'.
 
 # ancestry_file: the file location of Dataframe ancestry. For this input, user needs to provide the pi_hat and pi_star
-# value for the reference ancestries and observed ancestries they want to estimate. But the function will also provide
-# user the option of leaving pi_hat blank, by doing so, the function will call the HA function to get the value of
-# pi_hat but in that case, the user needs to provide an additional input K to run the HA function.
-# If the user will provide both pi_hat and pi_star, the input should be in the same format as following:
-
+# value for the reference ancestries and observed ancestries they want to estimate. But if the user don't have a
+# calculated pi_hat, the user could use the HA function to get those pi_hat they want. The function could be got by the
+# link https://github.com/jordanrhall/Hidden_Ancestries/blob/master/HA_script.py.
+# Here pi_hat represents the ancestry proportions the user inputs for the updated allele frequency.
+# And pi_star represents the estimated genome-wide mixture proportions for all ancestries.
+# Therefore, pi_star should be provided by the user, while the pi_star is better calculated by some algorithm, such as
+# the HA function provided on the link.
+# The user should provide both pi_hat and pi_star, and the input should be in the same format as following:
 # pi       ref_eur_1000G  obs_afr_gnmoad
 # pi_star  0              1
 # pi_hat   0.15           0.85
-
 # In this example, we only have one reference ancestry, which is ref_eur_1000G and we have one observed ancestry,
-# which is obs_afr_gnomad.
+# which is gnomAD_afr.
 # * One essential thing for the column name of the ancestry: the column names of the reference ancestries and
 # observed ancestry should be exactly the same as the one in the dataframe D.
 
 # ancestry_file_format: the data format of the input file of dataframe ancestry(the function of this input is exactly
 # the same as the D_file_format. The default is also "tab".
 
-# Integer K; the number of reference ancestries the user inputs
-# in the example case, we input 5 reference ancestries: ref_eur_1000G, ref_afr_1000G, ref_sas_1000G, ref_eas_1000G,
-# ref_iam_1000G, which stand for European, African, South Asian, East Asian, Indigenous American ancestries,
-# respectively.
-# The default is none. The user needs to input K only if the user wants to use the Hidden Ancestries Function to get
-# the pi_hat,
-
-# Integer obs: when using Hidden Ancestries Function to get pi_hat, the user also needs to input obs to locate the
-# observe ancestries we want to work on. It selects the ancestry which is k column(s) after the last reference
-# ancestry.
-# In the example case, when inputing obs = 1, we work on obs_amr_gnomad and when inputing obs = 2, we will work on
-# obs_oth_gnomad.
-
 # Then we get one output updateAF, which is the updated hidden proportions of every reference ancestry we select.
 
 # Example:
-# The case that the user inputs both pi_star and pi_hat.
 # output = updateHA("D_file_location","D_file_format","ancestry_file_location","ancestry_file_format")
-# When the user needs to use the Hidden Ancestries Function to help the user calculate pi_hat, then use command
-# output = updateHA("D_file_location","D_file_format","ancestry_file_location","ancestry_file_format", k, obs)
 
 # The output of Example;
-#     CHR        RSID        bP  ... obs_amr_gnomad obs_oth_gnomad  updateAF
-#       1   rs2887286   1156131  ...       0.525943       0.229705  0.539310
-#       1  rs41477744   2329564  ...       0.001179       0.008272  0.051583
-#       1   rs9661525   2952840  ...       0.286052       0.155617  0.133343
-#       1   rs2817174   3044181  ...       0.488180       0.470425  0.910666
-#       1  rs12139206   3504073  ...       0.295508       0.258748  0.793055
-#       1   rs7514979   3654595  ...       0.016509       0.024816  0.378376
+#The running time is 21.623375699999997
+#   CHR  RSID       BP       A1 A2  ref_eur_1000G ...  ref_iam_1000G   gnomAD_afr    gnomAD_amr    gnomAD_oth   updateAF
+#   1    rs2887286  1156131  C  T   0.173275495   ...  0.7093          0.4886100     0.52594300    0.22970500   0.544257
+#   1    rs41477744 2329564  A  G   0.001237745   ...  0.0000          0.0459137     0.00117925    0.00827206   0.053798
+#   1    rs9661525  2952840  G  T   0.168316089   ...  0.2442          0.1359770     0.28605200    0.15561700   0.130270
+#   1    rs2817174  3044181  C  T   0.428212624   ...  0.5000          0.8548790     0.48818000    0.47042500   0.930173
+#   1    rs12139206 3504073  T  C   0.204214851   ...  0.3372          0.7241780     0.29550800    0.25874800   0.815936
+#   1    rs7514979  3654595  T  C   0.004950604   ...  0.0000          0.3362490     0.01650940    0.02481620   0.394713
 # ...
 
+# Here we get the updateAF we want and the run time, which is 21.623375699999997 seconds, where in the example we use
+# 10000 rows of data.
+
+
+# Here is the main code of the function。
 import numpy as np
 import pandas as pd
 import timeit
 
-def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file_format='tab', k=None, obs=1,x_guess=None):
+np.set_printoptions(threshold=np.inf)
+
+
+def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file_format='tab'):
     # Start the clock
     start = timeit.default_timer()
 
     # Check the input formt of D_file_format
     if D_file_format not in ['tab','csv']:
         print('Please ensure the data format of D is either tab-delimited txt or csv')
+        return
 
     # Check the input formt of ancestry_file_format
     if ancestry_file_format not in ['tab','csv']:
         print('Please ensure the data format of ancestry is either tab-delimited txt or csv')
+        return
 
     # Reads dataframe D with certain data format
     if D_file_format=='csv':
@@ -101,14 +101,6 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
     # Check the data format of dataframe D
     if abs(np.shape(np.shape(D))[0]-2)>0:
         print('Please ensure that data matrix D is size Nxk.')
-        return
-
-    # Check the format of obs
-    if isinstance(obs,int)==False:
-        print('Please ensure that obs is an integer.')
-        return
-    elif obs <=0:
-        print('Please ensure that obs is a positive integer.')
         return
 
     # Check the data format of dataframe ancestry
@@ -130,11 +122,14 @@ def updateHA(D_file=None, D_file_format='tab', ancestry_file=None, ancestry_file
     HA_check = ancestry.isna()
 
     for i in range(1, len(ancestry.columns)):
+        if HA_check.values[0, i]:
+            print("Please provide all pi_star, in order to run the function.")
+            return
+
+    for i in range(1, len(ancestry.columns)):
         if HA_check.values[1, i]:
-            answer_obj = HA(file=D_file, file_format=D_file_format, k=k, obs=obs, x_guess = x_guess)
-            pi_final = answer_obj
-            print(pi_final)
-            # finish this part by inputting pi_hats from the result of HA function !!!!!!
+            print("Please provide all pi_hat, in order to run the function.")
+            return
 
     # Use HA_check to keep the columns names for that when using numpy to do computation will lose those column names
     HA_check = HA_check.drop(columns='pi')
